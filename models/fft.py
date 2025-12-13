@@ -3,6 +3,7 @@ import torch.nn as nn
 import copy
 
 from models.vit_base import VisionTransformer, PatchEmbed,resolve_pretrained_cfg, build_model_with_cfg, checkpoint_filter_fn, Block, Attention_LoRA
+from models.vit_base import default_cfgs
 import torch.nn.functional as F
 
 class Attention_FFT(Attention_LoRA):
@@ -118,28 +119,13 @@ class ViT_lora_fft(VisionTransformer):
 
 
 
-def _create_vision_transformer(variant, pretrained=False, **kwargs):
-    if kwargs.get('features_only', None):
-        raise RuntimeError('features_only not implemented for Vision Transformer models.')
-
-    # NOTE this extra code to support handling of repr size for in21k pretrained models
-    # pretrained_cfg = resolve_pretrained_cfg(variant, kwargs=kwargs)
-    pretrained_cfg = resolve_pretrained_cfg(variant)
-    default_num_classes = pretrained_cfg['num_classes']
-    num_classes = kwargs.get('num_classes', default_num_classes)
-    repr_size = kwargs.pop('representation_size', None)
-    if repr_size is not None and num_classes != default_num_classes:
-        repr_size = None
-
-    model = build_model_with_cfg(
-        ViT_lora_fft, variant, pretrained,
-        pretrained_cfg=pretrained_cfg,
-        representation_size=repr_size,
-        pretrained_filter_fn=checkpoint_filter_fn,
-        pretrained_custom_load='npz' in pretrained_cfg['url'],
-        **kwargs)
+def _create_vision_transformer(variant='vit_base_patch16_224.augreg_in21k_ft_in1k', pretrained=False, **kwargs):
+    import timm
+    pretrained_vit = timm.create_model(variant, pretrained=True)
+    model = ViT_lora_fft()
+    weight = pretrained_vit.state_dict()
+    model.load_state_dict(weight, strict=False)
     return model
-
 
 
 class SiNet(nn.Module):
@@ -148,7 +134,7 @@ class SiNet(nn.Module):
         super(SiNet, self).__init__()
 
         model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, n_tasks=args["total_sessions"], rank=args["rank"])
-        self.image_encoder =_create_vision_transformer('vit_base_patch16_224_in21k', pretrained=True, **model_kwargs)
+        self.image_encoder =_create_vision_transformer('vit_base_patch16_224.augreg_in21k_ft_in1k', pretrained=True, **model_kwargs)
         # print(self.image_encoder)
         # exit()
 

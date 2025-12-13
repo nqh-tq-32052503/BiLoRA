@@ -58,7 +58,7 @@ class BiLoRA(BaseLearner):
     def after_task(self):
     
         self._known_classes = self._total_classes
-        logging.info('Exemplar size: {}'.format(self.exemplar_size))
+        print('Exemplar size: {}'.format(self.exemplar_size))
 
     def incremental_train(self, data_manager):
 
@@ -66,7 +66,7 @@ class BiLoRA(BaseLearner):
         self._total_classes = self._known_classes + data_manager.get_task_size(self._cur_task)
         self._network.update_fc(self._total_classes)
 
-        logging.info('Learning on {}-{}'.format(self._known_classes, self._total_classes))
+        print('Learning on {}-{}'.format(self._known_classes, self._total_classes))
 
         train_dataset = data_manager.get_dataset(np.arange(self._known_classes, self._total_classes), source='train', mode='train')
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
@@ -171,7 +171,7 @@ class BiLoRA(BaseLearner):
                 self._cur_task, epoch + 1, self.run_epoch, losses / len(train_loader), train_acc)
             prog_bar.set_description(info)
 
-        logging.info(info)
+        print(info)
 
 
     def clustering(self, dataloader):

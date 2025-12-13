@@ -37,7 +37,7 @@ def _train(args):
         os.makedirs(logdir)
     logfilename = os.path.join(logdir, '{}'.format(args['seed']))
     logging.basicConfig(
-        level=logging.INFO,
+        level=print,
         format='%(asctime)s [%(filename)s] => %(message)s',
         handlers=[
             logging.FileHandler(filename=logfilename + '.log'),
@@ -56,26 +56,26 @@ def _train(args):
 
     cnn_curve, cnn_curve_with_task, nme_curve, cnn_curve_task = {'top1': []}, {'top1': []}, {'top1': []}, {'top1': []}
     for task in range(data_manager.nb_tasks):
-        logging.info('All params: {}'.format(count_parameters(model._network)))
-        logging.info('Trainable params: {}'.format(count_parameters(model._network, True)))
+        print('All params: {}'.format(count_parameters(model._network)))
+        print('Trainable params: {}'.format(count_parameters(model._network, True)))
         time_start = time.time()
         model.incremental_train(data_manager)
         time_end = time.time()
-        logging.info('Time:{}'.format(time_end - time_start))
+        print('Time:{}'.format(time_end - time_start))
         time_start = time.time()
         cnn_accy, cnn_accy_with_task, nme_accy, cnn_accy_task = model.eval_task()
         time_end = time.time()
-        logging.info('Time:{}'.format(time_end - time_start))
+        print('Time:{}'.format(time_end - time_start))
         # raise Exception
         model.after_task()
 
-        logging.info('CNN: {}'.format(cnn_accy['grouped']))
+        print('CNN: {}'.format(cnn_accy['grouped']))
         cnn_curve['top1'].append(cnn_accy['top1'])
         cnn_curve_with_task['top1'].append(cnn_accy_with_task['top1'])
         cnn_curve_task['top1'].append(cnn_accy_task)
-        logging.info('CNN top1 curve: {}'.format(cnn_curve['top1']))
-        logging.info('CNN top1 with task curve: {}'.format(cnn_curve_with_task['top1']))
-        logging.info('CNN top1 task curve: {}'.format(cnn_curve_task['top1']))
+        print('CNN top1 curve: {}'.format(cnn_curve['top1']))
+        print('CNN top1 with task curve: {}'.format(cnn_curve_with_task['top1']))
+        print('CNN top1 task curve: {}'.format(cnn_curve_task['top1']))
 
         # if task >= 3: break
 
@@ -106,5 +106,5 @@ def _set_random(args):
 
 def print_args(args):
     for key, value in args.items():
-        logging.info('{}: {}'.format(key, value))
+        print('{}: {}'.format(key, value))
 

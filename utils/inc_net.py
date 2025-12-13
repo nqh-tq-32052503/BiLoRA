@@ -710,5 +710,5 @@ class FOSTERNet(nn.Module):
         meannew = torch.mean(newnorm)
         meanold = torch.mean(oldnorm)
         gamma = meanold / meannew * (value ** (old / increment))
-        logging.info("align weights, gamma = {} ".format(gamma))
+        print("align weights, gamma = {} ".format(gamma))
         self.fc.weight.data[-increment:, :] *= gamma

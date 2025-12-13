@@ -153,7 +153,7 @@ class DataManager(object):
         else:
             order = idata.class_order
         self._class_order = order
-        logging.info(self._class_order)
+        print(self._class_order)
 
         # Map indices
         self._train_targets = _map_new_class_index(self._train_targets, self._class_order)

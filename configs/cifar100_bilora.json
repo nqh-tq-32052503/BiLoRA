@@ -28,5 +28,6 @@
     "rank": 10,
     "lamb": 0.95,
     "lame": 1.0,
-    "num_workers" : 16
+    "num_workers" : 16,
+    "device" : "cpu"
 }
