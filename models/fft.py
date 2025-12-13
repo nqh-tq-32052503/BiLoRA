@@ -123,8 +123,17 @@ def _create_vision_transformer(variant='vit_base_patch16_224.augreg_in21k_ft_in1
     import timm
     pretrained_vit = timm.create_model(variant, pretrained=True)
     model = ViT_lora_fft()
-    weight = pretrained_vit.state_dict()
-    model.load_state_dict(weight, strict=False)
+    pretrained_state = pretrained_vit.state_dict()
+    incompatible = model.load_state_dict(pretrained_state, strict=False)
+
+    missing_keys = set(incompatible.missing_keys)
+    unexpected_keys = set(incompatible.unexpected_keys)
+
+    # 4. Freeze các param được match
+    for name, param in model.named_parameters():
+        if name not in missing_keys:
+            # key match giữa model và pretrained
+            param.requires_grad = False
     return model
 
 
