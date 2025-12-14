@@ -75,7 +75,7 @@ class BiLoRA(BaseLearner):
         self.test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False,
                                       num_workers=self.num_workers)
         self._train(self.train_loader, self.test_loader)
-        self.clustering(self.train_loader)
+        # self.clustering(self.train_loader)
 
     def _train(self, train_loader, test_loader):
         self._network.to(self._device)
