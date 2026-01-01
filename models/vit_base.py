@@ -171,7 +171,48 @@ default_cfgs = {
     'vit_base_patch16_18x2_224': _cfg(url=''),
 }
 
+class Attention(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0., **kwargs):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
 
+        self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.k_proj = nn.Linear(dim, dim, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(self, x, task=None):
+        B, N, C = x.shape
+
+        q = self.q_proj(x)
+        k = self._shape(self.k_proj(x), -1, B).view(B * self.num_heads, -1, self.head_dim)
+        v = self._shape(self.v_proj(x), -1, B).view(B * self.num_heads, -1, self.head_dim)
+        q = self._shape(q, N, B).view(B * self.num_heads, -1, self.head_dim)
+
+        # attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn_weights = torch.bmm(q, k.transpose(1, 2)) * self.scale
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_probs = self.attn_drop(attn_weights)
+        attn_output = torch.bmm(attn_probs, v)
+
+        attn_output = attn_output.view(B, self.num_heads, N, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(B, N, C)
+
+        x = self.proj(attn_output)
+        x = self.proj_drop(x)
+
+        return x
 
 
 class Attention_LoRA(nn.Module):
@@ -397,7 +438,8 @@ class Block(nn.Module):
             drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, n_tasks=10, r=64):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention_LoRA(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, n_tasks=n_tasks, r=r)
+        # self.attn = Attention_LoRA(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, n_tasks=n_tasks, r=r)
+        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
         self.ls1 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
