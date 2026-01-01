@@ -559,9 +559,7 @@ class VisionTransformer(nn.Module):
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.cls_token_grow = nn.Parameter(torch.zeros(1, 5000, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_tokens, embed_dim))
-        self.pos_embed_grow = nn.Parameter(torch.zeros(1, num_patches + 1000, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
@@ -602,9 +600,7 @@ class VisionTransformer(nn.Module):
         assert mode in ('jax', 'jax_nlhb', 'moco', '')
         head_bias = -math.log(self.num_classes) if 'nlhb' in mode else 0.
         trunc_normal_(self.pos_embed, std=.02)
-        trunc_normal_(self.pos_embed_grow, std=.02)
         nn.init.normal_(self.cls_token, std=1e-6)
-        nn.init.normal_(self.cls_token_grow, std=1e-6)
         named_apply(get_init_weights_vit(mode, head_bias), self)
 
     def _init_weights(self, m):
@@ -644,33 +640,18 @@ class VisionTransformer(nn.Module):
         final_chs = self.representation_size if self.representation_size else self.embed_dim
         self.head = nn.Linear(final_chs, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x, task=None):
         x = self.patch_embed(x)
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
 
         x = self.pos_drop(x + self.pos_embed)
         if self.grad_checkpointing and not torch.jit.is_scripting():
             x = checkpoint_seq(self.blocks, x)
-        else:
-            x = self.blocks(x)
+        for blk in self.blocks:
+            x = blk(x, task=task, register_hook=False)
         x = self.norm(x)
         return x
 
-    def forward_features_grow(self, x, class_num):
-        x = self.patch_embed(x)
-        # x = torch.cat((self.cls_token_grow[:, :class_num, :].expand(x.shape[0], -1, -1), self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        # x = self.pos_drop(x + self.pos_embed_grow[:, :self.patch_embed.num_patches+class_num, :])
-        x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        x = self.pos_drop(x + self.pos_embed)
-        x = torch.cat((self.cls_token_grow[:, :class_num*2, :].expand(x.shape[0], -1, -1), x), dim=1)
-
-        # import pdb;pdb.set_trace()
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            x = checkpoint_seq(self.blocks, x)
-        else:
-            x = self.blocks(x)
-        x = self.norm(x)
-        return x
 
     def forward_head(self, x, pre_logits: bool = False):
         if self.global_pool:
@@ -679,11 +660,8 @@ class VisionTransformer(nn.Module):
         x = self.pre_logits(x)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x, grow_flag=False, numcls=0):
-        if not grow_flag:
-            x = self.forward_features(x)
-        else:
-            x = self.forward_features_grow(x, numcls)
+    def forward(self, x, task=None, grow_flag=False, numcls=0):
+        x = self.forward_features(x, task=task)
 
         if self.global_pool:
             x = x[:, 1:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
