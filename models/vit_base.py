@@ -172,48 +172,55 @@ default_cfgs = {
 }
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0., **kwargs):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
-        self.head_dim = dim // num_heads
-        self.scale = head_dim ** -0.5
-
-        self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
-        self.v_proj = nn.Linear(dim, dim, bias=qkv_bias)
-        self.k_proj = nn.Linear(dim, dim, bias=qkv_bias)
-
+        # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
+        self.scale = qk_scale or head_dim ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(self, x, task=None):
+        self.attn_gradients = None
+        self.attention_map = None
+        
+    def save_attn_gradients(self, attn_gradients):
+        self.attn_gradients = attn_gradients
+        
+    def get_attn_gradients(self):
+        return self.attn_gradients
+    
+    def save_attention_map(self, attention_map):
+        self.attention_map = attention_map
+        
+    def get_attention_map(self):
+        return self.attention_map
+    
+    def forward(self, x, task=None, register_hook=False, prompt=None):
         B, N, C = x.shape
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
-        q = self.q_proj(x)
-        k = self._shape(self.k_proj(x), -1, B).view(B * self.num_heads, -1, self.head_dim)
-        v = self._shape(self.v_proj(x), -1, B).view(B * self.num_heads, -1, self.head_dim)
-        q = self._shape(q, N, B).view(B * self.num_heads, -1, self.head_dim)
+        if prompt is not None:
+            pk, pv = prompt
+            pk = pk.reshape(B, -1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+            pv = pv.reshape(B, -1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+            k = torch.cat((pk,k), dim=2)
+            v = torch.cat((pv,v), dim=2)
 
-        # attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn_weights = torch.bmm(q, k.transpose(1, 2)) * self.scale
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+                
+        if register_hook:
+            self.save_attention_map(attn)
+            attn.register_hook(self.save_attn_gradients)        
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        attn_probs = self.attn_drop(attn_weights)
-        attn_output = torch.bmm(attn_probs, v)
-
-        attn_output = attn_output.view(B, self.num_heads, N, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(B, N, C)
-
-        x = self.proj(attn_output)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
         x = self.proj_drop(x)
-
         return x
-
 
 class Attention_LoRA(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., r=64, n_tasks=10):
