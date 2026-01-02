@@ -134,9 +134,10 @@ class BiLoRA(BaseLearner):
                 outputs = self._network(inputs, labels=targets)
                 logits = outputs['logits']
                 prompt_loss = outputs['prompt_loss']
-                loss = F.cross_entropy(logits, targets)
                 if prompt_loss is not None:
-                    loss += 0.05 * prompt_loss
+                    loss = prompt_loss
+                else:
+                    loss = F.cross_entropy(logits, targets)
                 optimizer.zero_grad()
                 loss.backward()
 

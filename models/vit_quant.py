@@ -234,7 +234,7 @@ class CPEViT(nn.Module):
 
     def forward_features(self, x, task_id=None, labels=None):
         y1 = self.patch_embed(x)
-        if False:
+        if labels is not None:
             selected_cpe = torch.index_select(self.cpe, 0, labels)
             y2 = y1 + selected_cpe.unsqueeze(1)
         else:
@@ -337,7 +337,7 @@ class QuantViT(nn.Module):
             self.init_weights(weight_init)
         # CPE
         self.num_embeddings = num_embeddings
-        self.init_cpe()
+        self.cpe = nn.Parameter(torch.randn(10, self.embed_dim), requires_grad=True)
         self.quant_embedding = nn.Parameter(torch.randn(num_embeddings, self.embed_dim), requires_grad=True)
 
     def _reset_representation(self, representation_size):
@@ -360,11 +360,6 @@ class QuantViT(nn.Module):
     def _init_weights(self, m):
         # this fn left here for compat with downstream users
         init_weights_vit_timm(m)
-
-    def init_cpe(self, checkpoint="cpe.pt"):
-        weight = torch.load(checkpoint, weights_only=False, map_location="cpu")
-        self.cpe = weight
-        self.cpe.requires_grad = False
 
     @torch.jit.ignore()
     def load_pretrained(self, checkpoint_path, prefix=''):
@@ -399,10 +394,21 @@ class QuantViT(nn.Module):
         final_chs = self.representation_size if self.representation_size else self.embed_dim
         self.head = nn.Linear(final_chs, num_classes) if num_classes > 0 else nn.Identity()
 
+    def quantize(self, unquantized_tensor: torch.Tensor, embedding_space: torch.Tensor):
+        batch_size, num_patches, embed_dim = unquantized_tensor.shape
+        A = unquantized_tensor.reshape(batch_size * num_patches, embed_dim)
+        dist_matrix = torch.cdist(A, embedding_space, p=2)
+        selected_indices = torch.argmin(dist_matrix, dim=1).to(torch.long)
+        R = torch.index_select(embedding_space, 0, selected_indices)
+        quantized_tensor = R.reshape(batch_size, num_patches, embed_dim)
+        return quantized_tensor
+    
     def forward_features(self, x, task_id=None, labels=None):
         x = self.patch_embed(x)
+        x0 = x.clone().detach()
+        x = self.quantize(x, self.quant_embedding)
         if labels is not None:
-            selected_cpe = torch.index_select(self.cpe.weight, 0, labels)
+            selected_cpe = torch.index_select(self.cpe, 0, labels)
             x = x + selected_cpe.unsqueeze(1)
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
 
@@ -411,8 +417,8 @@ class QuantViT(nn.Module):
             x = checkpoint_seq(self.blocks, x)
         for blk in self.blocks:
             x = blk(x, task_id=task_id, register_hook=False)
-
-        return x
+        prompt_loss = F.mse_loss(x[:, 1:, :], x0)
+        return x, prompt_loss
 
 
     def forward_head(self, x, pre_logits: bool = False):
@@ -423,5 +429,5 @@ class QuantViT(nn.Module):
         return x if pre_logits else self.head(x)
 
     def forward(self, x, task_id=None, labels=None, register_blk=None, get_feat=False, get_cur_feat=False):
-        x = self.forward_features(x, task_id=task_id, labels=labels)
-        return x, None
+        x, prompt_loss = self.forward_features(x, task_id=task_id, labels=labels)
+        return x, prompt_loss
