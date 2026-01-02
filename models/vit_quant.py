@@ -233,19 +233,18 @@ class CPEViT(nn.Module):
         self.head = nn.Linear(final_chs, num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x, task_id=None, labels=None):
-        x = self.patch_embed(x)
+        y1 = self.patch_embed(x)
         if labels is not None:
             selected_cpe = torch.index_select(self.cpe, 0, labels)
-            x = x + selected_cpe.unsqueeze(1)
-        x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+            y2 = y1 + selected_cpe.unsqueeze(1)
+        y3 = torch.cat((self.cls_token.expand(y2.shape[0], -1, -1), y2), dim=1)
 
-        x = self.pos_drop(x + self.pos_embed)
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            x = checkpoint_seq(self.blocks, x)
+        y4 = self.pos_drop(y3 + self.pos_embed)
         for blk in self.blocks:
-            x = blk(x, task_id=task_id, register_hook=False)
-        x = self.norm(x)
-        return x
+            y4 = blk(y4, task_id=task_id, register_hook=False)
+        y5 = self.norm(y4)
+        self.locals = locals()
+        return y5
 
 
     def forward_head(self, x, pre_logits: bool = False):
@@ -410,7 +409,7 @@ class QuantViT(nn.Module):
             x = checkpoint_seq(self.blocks, x)
         for blk in self.blocks:
             x = blk(x, task_id=task_id, register_hook=False)
-        x = self.norm(x)
+
         return x
 
 
