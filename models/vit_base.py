@@ -220,6 +220,7 @@ class Attention(nn.Module):
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
+        self.locals = locals()
         return x
 
 class Attention_LoRA(nn.Module):
