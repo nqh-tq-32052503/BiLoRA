@@ -140,10 +140,12 @@ class BiLoRA(BaseLearner):
 
     def train_function(self, train_loader, test_loader, optimizer, scheduler):
         prog_bar = tqdm(range(self.run_epoch))
+        self.cpe_weights = []
         for _, epoch in enumerate(prog_bar):
             self._network.eval()
             losses = 0.
             correct, total = 0, 0
+            self.cpe_weights.append(self._network.image_encoder.cpe.weight)
             for i, (_, inputs, targets) in enumerate(train_loader):
 
                 inputs, targets = inputs.to(self._device), targets.to(self._device)
