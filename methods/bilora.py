@@ -80,27 +80,6 @@ class BiLoRA(BaseLearner):
 
     def _train(self, train_loader, test_loader):
         self._network.to(self._device)
-        for name, param in self._network.named_parameters():
-            param.requires_grad_(False)
-            try:
-                if "classifier_pool" + "." + str(self._network.module.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "coef_k" + "." + str(self._network.module.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "coef_v" + "." + str(self._network.module.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "cpe" in name:
-                    param.requires_grad_(True)
-            except:
-                if "classifier_pool" + "." + str(self._network.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "coef_k" + "." + str(self._network.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "coef_v" + "." + str(self._network.numtask - 1) in name:
-                    param.requires_grad_(True)
-                if "cpe" in name:
-                    param.requires_grad_(True)
-
         # Double check
         enabled = set()
         for name, param in self._network.named_parameters():
