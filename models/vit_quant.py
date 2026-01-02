@@ -48,6 +48,17 @@ class QuantizeAttention(nn.Module):
         quantized_tensor = torch.gather(B_expanded, 2, indices_expanded)
         return quantized_tensor
 
+    def quantize_except_cls_token(self, unquantized_tensor: torch.Tensor, embedding_space: torch.Tensor):
+        batch_size = unquantized_tensor.size(0)
+        cls_token = unquantized_tensor[:, :, 0, :].unsqueeze(2)
+        feature_token = unquantized_tensor[:, :, 1:, :]
+        dist_matrix = torch.cdist(feature_token, embedding_space.unsqueeze(0), p=2) # Shape: (7, 12, 197, 50)
+        selected_indices = torch.argmin(dist_matrix, dim=-1)
+        B_expanded = embedding_space.unsqueeze(0).expand(batch_size, -1, -1, -1)
+        indices_expanded = selected_indices.unsqueeze(-1).expand(-1, -1, -1, self.head_dim)
+        quantized_feature = torch.gather(B_expanded, 2, indices_expanded)
+        return cls_token, quantized_feature
+
     def forward(self, x, task_id=None, register_hook=False, prompt=None, get_feat=False,get_cur_feat=False):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
@@ -64,14 +75,16 @@ class QuantizeAttention(nn.Module):
         attn = attn.softmax(dim=-1)
 
         # Quantize
-        quant_q = self.quantize(q, self.q_embed_space)
-        quant_k = self.quantize(k, self.k_embed_space)
-        quant_attn = (quant_q @ quant_k.transpose(-2, -1)) * self.scale
+        q_cls, quant_q = self.quantize_except_cls_token(q, self.q_embed_space)
+        k_cls, quant_k = self.quantize_except_cls_token(k, self.k_embed_space)
+        cat_q = torch.cat((q_cls.detach(), quant_q), dim=2)
+        cat_k = torch.cat((k_cls.detach(), quant_k), dim=2)
+        quant_attn = (cat_q @ cat_k.transpose(-2, -1)) * self.scale
         quant_attn = quant_attn.softmax(dim=-1)
 
         # Quantize Loss
-        quant_loss = F.mse_loss(quant_q, q.detach()) + F.mse_loss(quant_k, k.detach())
-        quant_loss += self.alpha * F.kl_div(quant_attn, attn.detach())
+        quant_loss = F.mse_loss(quant_q, q[:, :, 1:, :].detach()) + F.mse_loss(quant_k, k[:, :, 1:, :].detach())
+        quant_loss += F.kl_div(quant_attn, attn.detach())
 
 
         quant_attn = self.attn_drop(quant_attn)
