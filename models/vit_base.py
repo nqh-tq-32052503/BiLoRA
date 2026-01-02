@@ -197,7 +197,7 @@ class Attention(nn.Module):
     def get_attention_map(self):
         return self.attention_map
     
-    def forward(self, x, task_id=None, register_hook=False, prompt=None):
+    def forward(self, x, task_id=None, register_hook=False, prompt=None, get_feat=False,get_cur_feat=False):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
