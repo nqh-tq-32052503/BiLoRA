@@ -234,9 +234,11 @@ class CPEViT(nn.Module):
 
     def forward_features(self, x, task_id=None, labels=None):
         y1 = self.patch_embed(x)
-        if labels is not None:
+        if False:
             selected_cpe = torch.index_select(self.cpe, 0, labels)
             y2 = y1 + selected_cpe.unsqueeze(1)
+        else:
+            y2 = y1
         y3 = torch.cat((self.cls_token.expand(y2.shape[0], -1, -1), y2), dim=1)
 
         y4 = self.pos_drop(y3 + self.pos_embed)
