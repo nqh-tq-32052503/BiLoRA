@@ -12,7 +12,7 @@ import torch.utils.checkpoint
 from timm.models.helpers import named_apply, checkpoint_seq
 from timm.models.layers import PatchEmbed, Mlp, DropPath, trunc_normal_
 
-from models.vit_base import LayerScale, get_init_weights_vit, _load_weights, init_weights_vit_timm
+from models.vit_base import LayerScale, get_init_weights_vit, _load_weights, init_weights_vit_timm, Block
 
 _logger = logging.getLogger(__name__)
 
@@ -32,7 +32,6 @@ class QuantizeAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.attn_gradients = None
         self.attention_map = None
-        self.alpha = alpha
         self.init_embedding_spaces()
 
     def init_embedding_spaces(self):
@@ -100,32 +99,8 @@ class QuantizeAttention(nn.Module):
         return x, quant_loss
 
 
-class QuantizeBlock(nn.Module):
-    def __init__(
-            self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., init_values=None,
-            drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, n_tasks=10, r=64):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        # self.attn = Attention_LoRA(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, n_tasks=n_tasks, r=r)
-        self.attn = QuantizeAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-        self.ls1 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.ls2 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
-        self.drop_path2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-
-    def forward(self, x, task_id, register_hook=False, get_feat=False, get_cur_feat=False):
-        x, quant_loss = self.attn(self.norm1(x), task_id, register_hook=register_hook, get_feat=get_feat, get_cur_feat=get_cur_feat)
-        x = x + self.drop_path1(self.ls1(x))
-        x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
-        return x, quant_loss
-
-
-class QuantizeViT(nn.Module):
+class CPEViT(nn.Module):
     """ Vision Transformer
     A PyTorch impl of : `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale`
         - https://arxiv.org/abs/2010.11929
@@ -135,7 +110,7 @@ class QuantizeViT(nn.Module):
             self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, global_pool='token',
             embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None,
             drop_rate=0., attn_drop_rate=0., drop_path_rate=0., weight_init='', init_values=None,
-            embed_layer=PatchEmbed, norm_layer=None, act_layer=None, block_fn=QuantizeBlock, n_tasks=10, rank=64):
+            embed_layer=PatchEmbed, norm_layer=None, act_layer=None, block_fn=Block, n_tasks=10, rank=64):
         """
         Args:
             img_size (int, tuple): input image size
@@ -200,6 +175,8 @@ class QuantizeViT(nn.Module):
 
         if weight_init != 'skip':
             self.init_weights(weight_init)
+        # CPE
+        self.cpe = nn.Embedding(10, self.embed_dim)
 
     def _reset_representation(self, representation_size):
         self.representation_size = representation_size
@@ -255,20 +232,29 @@ class QuantizeViT(nn.Module):
         final_chs = self.representation_size if self.representation_size else self.embed_dim
         self.head = nn.Linear(final_chs, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x, task_id=None):
+    def forward_features(self, x, task_id=None, labels=None):
         x = self.patch_embed(x)
+        if labels is not None:
+            selected_cpe = torch.index_select(self.cpe.weight, 0, labels)
+            x = x + selected_cpe.unsqueeze(1)
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
 
         x = self.pos_drop(x + self.pos_embed)
         if self.grad_checkpointing and not torch.jit.is_scripting():
             x = checkpoint_seq(self.blocks, x)
-        quant_loss = 0
         for blk in self.blocks:
-            x, block_quant_loss = blk(x, task_id=task_id, register_hook=False)
-            quant_loss += block_quant_loss
+            x = blk(x, task_id=task_id, register_hook=False)
         x = self.norm(x)
-        return x, quant_loss
+        return x
 
-    def forward(self, x, task_id=None, register_blk=None, get_feat=False, get_cur_feat=False):
-        x, quant_loss = self.forward_features(x, task_id=task_id)
-        return x, quant_loss
+
+    def forward_head(self, x, pre_logits: bool = False):
+        if self.global_pool:
+            x = x[:, 1:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
+        x = self.fc_norm(x)
+        x = self.pre_logits(x)
+        return x if pre_logits else self.head(x)
+
+    def forward(self, x, task_id=None, labels=None, register_blk=None, get_feat=False, get_cur_feat=False):
+        x = self.forward_features(x, task_id=task_id, labels=labels)
+        return x, None

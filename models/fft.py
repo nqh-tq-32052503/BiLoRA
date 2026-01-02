@@ -4,7 +4,7 @@ import copy
 
 from models.vit_base import VisionTransformer, PatchEmbed,resolve_pretrained_cfg, build_model_with_cfg, checkpoint_filter_fn, Block, Attention_LoRA
 from models.vit_base import default_cfgs
-from models.vit_quant import QuantizeViT
+from models.vit_quant import CPEViT
 import torch.nn.functional as F
 
 class Attention_FFT(Attention_LoRA):
@@ -123,7 +123,7 @@ class ViT_lora_fft(VisionTransformer):
 def _create_vision_transformer(variant='vit_base_patch16_224.augreg_in21k_ft_in1k', pretrained=False, **kwargs):
     import timm
     pretrained_vit = timm.create_model(variant, pretrained=True)
-    model = VisionTransformer() # QuantizeViT() # VisionTransformer() # ViT_lora_fft()
+    model = CPEViT() # QuantizeViT() # VisionTransformer() # ViT_lora_fft()
     pretrained_state = pretrained_vit.state_dict()
     incompatible = model.load_state_dict(pretrained_state, strict=False)
 

@@ -13,6 +13,7 @@ from utils.toolkit import tensor2numpy, accuracy
 from models.fft import SiNet
 from models.fft import Attention_FFT
 from utils.schedulers import CosineSchedule
+from utils.data_manager import DataManager
 
 
 class BiLoRA(BaseLearner):
@@ -60,7 +61,7 @@ class BiLoRA(BaseLearner):
         self._known_classes = self._total_classes
         print('Exemplar size: {}'.format(self.exemplar_size))
 
-    def incremental_train(self, data_manager):
+    def incremental_train(self, data_manager: DataManager):
 
         self._cur_task += 1
         self._total_classes = self._known_classes + data_manager.get_task_size(self._cur_task)
