@@ -197,7 +197,7 @@ class Attention(nn.Module):
     def get_attention_map(self):
         return self.attention_map
     
-    def forward(self, x, task=None, register_hook=False, prompt=None):
+    def forward(self, x, task_id=None, register_hook=False, prompt=None):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
@@ -457,8 +457,8 @@ class Block(nn.Module):
         self.ls2 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-    def forward(self, x, task, register_hook=False, get_feat=False, get_cur_feat=False):
-        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), task, register_hook=register_hook, get_feat=get_feat, get_cur_feat=get_cur_feat)))
+    def forward(self, x, task_id, register_hook=False, get_feat=False, get_cur_feat=False):
+        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), task_id, register_hook=register_hook, get_feat=get_feat, get_cur_feat=get_cur_feat)))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
         return x
     
@@ -640,7 +640,7 @@ class VisionTransformer(nn.Module):
         final_chs = self.representation_size if self.representation_size else self.embed_dim
         self.head = nn.Linear(final_chs, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x, task=None):
+    def forward_features(self, x, task_id=None):
         x = self.patch_embed(x)
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
 
@@ -648,7 +648,7 @@ class VisionTransformer(nn.Module):
         if self.grad_checkpointing and not torch.jit.is_scripting():
             x = checkpoint_seq(self.blocks, x)
         for blk in self.blocks:
-            x = blk(x, task=task, register_hook=False)
+            x = blk(x, task_id=task_id, register_hook=False)
         x = self.norm(x)
         return x
 
