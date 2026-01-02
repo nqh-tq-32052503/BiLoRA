@@ -662,14 +662,7 @@ class VisionTransformer(nn.Module):
 
     def forward(self, x, task_id=None, register_blk=None, get_feat=False, get_cur_feat=False):
         x = self.forward_features(x, task_id=task_id)
-
-        if self.global_pool:
-            x = x[:, 1:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
-        x = self.fc_norm(x)
-        return {
-            'fmaps': [x],
-            'features': x
-        }
+        return x, None
 
 
 def init_weights_vit_timm(module: nn.Module, name: str = ''):
