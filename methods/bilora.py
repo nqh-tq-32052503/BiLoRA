@@ -151,7 +151,7 @@ class BiLoRA(BaseLearner):
                 inputs = torch.index_select(inputs, 0, mask)
                 targets = torch.index_select(targets, 0, mask)-self._known_classes
                 
-                outputs = self._network(inputs)
+                outputs = self._network(inputs, labels=targets)
                 logits = outputs['logits']
                 prompt_loss = outputs['prompt_loss']
                 loss = F.cross_entropy(logits, targets)
