@@ -107,11 +107,6 @@ class BiLoRA(BaseLearner):
             if param.requires_grad:
                 enabled.add(name)
 
-        with torch.no_grad():
-            for i, (_, inputs, targets) in enumerate(train_loader):
-                inputs, targets = inputs.to(self._device), targets.to(self._device)
-                self._network(inputs, get_cur_feat=True)
-
         print(f"Parameters to be updated: {enabled}")
         if len(self._multiple_gpus) > 1:
             self._network = nn.DataParallel(self._network, self._multiple_gpus)
