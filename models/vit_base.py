@@ -660,7 +660,7 @@ class VisionTransformer(nn.Module):
         x = self.pre_logits(x)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x, task_id=None, grow_flag=False, numcls=0):
+    def forward(self, x, task_id=None, register_blk=None, get_feat=False, get_cur_feat=False):
         x = self.forward_features(x, task_id=task_id)
 
         if self.global_pool:
