@@ -336,9 +336,8 @@ class QuantViT(nn.Module):
             self.init_weights(weight_init)
         # CPE
         self.num_embeddings = num_embeddings
-        self.cpe = nn.Embedding(10, self.embed_dim)
         self.init_cpe()
-        self.quant_embedding = nn.Embedding(num_embeddings, self.embed_dim)
+        self.quant_embedding = nn.Parameter(torch.randn(num_embeddings, self.embed_dim), requires_grad=True)
 
     def _reset_representation(self, representation_size):
         self.representation_size = representation_size
@@ -363,7 +362,8 @@ class QuantViT(nn.Module):
 
     def init_cpe(self, checkpoint="cpe.pt"):
         weight = torch.load(checkpoint, weights_only=False, map_location="cpu")
-        self.cpe.weight = weight
+        self.cpe = weight
+        self.cpe.requires_grad = False
 
     @torch.jit.ignore()
     def load_pretrained(self, checkpoint_path, prefix=''):
