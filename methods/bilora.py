@@ -145,7 +145,7 @@ class BiLoRA(BaseLearner):
             self._network.eval()
             losses = 0.
             correct, total = 0, 0
-            self.cpe_weights.append(self._network.image_encoder.cpe.weight)
+            self.cpe_weights.append(self._network.image_encoder.cpe.detach())
             for i, (_, inputs, targets) in enumerate(train_loader):
 
                 inputs, targets = inputs.to(self._device), targets.to(self._device)
