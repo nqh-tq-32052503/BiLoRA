@@ -171,6 +171,7 @@ default_cfgs = {
     'vit_base_patch16_18x2_224': _cfg(url=''),
 }
 
+
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
@@ -439,6 +440,7 @@ class LayerScale(nn.Module):
         return x.mul_(self.gamma) if self.inplace else x * self.gamma
 
 
+
 class Block(nn.Module):
 
     def __init__(
@@ -509,6 +511,7 @@ class ParallelBlock(nn.Module):
             return self._forward_jit(x)
         else:
             return self._forward(x)
+
 
 
 class VisionTransformer(nn.Module):
