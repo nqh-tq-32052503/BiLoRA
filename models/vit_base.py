@@ -660,8 +660,8 @@ class VisionTransformer(nn.Module):
         x = self.pre_logits(x)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x, task=None, grow_flag=False, numcls=0):
-        x = self.forward_features(x, task=task)
+    def forward(self, x, task_id=None, grow_flag=False, numcls=0):
+        x = self.forward_features(x, task_id=task_id)
 
         if self.global_pool:
             x = x[:, 1:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
