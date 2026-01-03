@@ -156,8 +156,8 @@ class BiLoRA(BaseLearner):
             info = 'Task {}, Epoch {}/{} => Loss {:.3f}, Train_accy {:.2f}'.format(
                 self._cur_task, epoch + 1, self.run_epoch, losses / len(train_loader), train_acc)
             print(info)
-            acc = self.eval_quant_task()
-            print(f"Accuracy: {acc}")
+            # acc = self.eval_quant_task()
+            # print(f"Accuracy: {acc}")
 
 
     def clustering(self, dataloader):
