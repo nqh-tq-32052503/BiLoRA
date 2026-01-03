@@ -125,6 +125,7 @@ class BiLoRA(BaseLearner):
             losses = 0.
             correct, total = 0, 0
             self.cpe_weights.append(self._network.image_encoder.cpe.detach())
+            self._network.train()
             for train_batch in tqdm(train_loader):
                 _, inputs, targets = train_batch
                 inputs, targets = inputs.to(self._device), targets.to(self._device)
@@ -154,8 +155,9 @@ class BiLoRA(BaseLearner):
 
             info = 'Task {}, Epoch {}/{} => Loss {:.3f}, Train_accy {:.2f}'.format(
                 self._cur_task, epoch + 1, self.run_epoch, losses / len(train_loader), train_acc)
-
-        print(info)
+            print(info)
+            acc = self.eval_quant_task()
+            print(f"Accuracy: {acc}")
 
 
     def clustering(self, dataloader):
