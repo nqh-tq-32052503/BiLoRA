@@ -61,7 +61,7 @@ class BiLoRA(BaseLearner):
         self._known_classes = self._total_classes
         print('Exemplar size: {}'.format(self.exemplar_size))
 
-    def incremental_train(self, data_manager: DataManager):
+    def incremental_train(self, data_manager: DataManager, train=True):
 
         self._cur_task += 1
         self._total_classes = self._known_classes + data_manager.get_task_size(self._cur_task)
@@ -75,7 +75,9 @@ class BiLoRA(BaseLearner):
         test_dataset = data_manager.get_dataset(np.arange(0, self._total_classes), source='test', mode='test')
         self.test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False,
                                       num_workers=self.num_workers)
-        self._train(self.train_loader, self.test_loader)
+        print("[INFO] Created train dataloader and test dataloader")
+        if train:
+            self._train(self.train_loader, self.test_loader)
         # self.clustering(self.train_loader)
 
     def _train(self, train_loader, test_loader):

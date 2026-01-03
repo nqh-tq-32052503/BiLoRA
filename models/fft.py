@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import copy
-
+import numpy as np
 from models.vit_base import VisionTransformer, PatchEmbed,resolve_pretrained_cfg, build_model_with_cfg, checkpoint_filter_fn, Block, Attention_LoRA
 from models.vit_base import default_cfgs
 from models.vit_quant import CPEViT, QuantViT
@@ -198,6 +198,16 @@ class SiNet(nn.Module):
             'features': image_features,
             'prompt_loss': prompt_loss
         }
+
+    def test_quant(self, image, task_id=None):
+        assert isinstance(image, torch.Tensor) and image.size(0) == 1 and len(image.shape) == 4, f"Type image: {type(image), image.shape}"
+        candidate_losses = []
+        for label in range(self.class_num):
+            pseudo_label = torch.tensor([label], dtype=torch.long, device=image.device)
+            _, pseudo_prompt_loss = self.image_encoder(image, labels=pseudo_label, task_id=task_id, get_feat=False, get_cur_feat=False)
+            pseudo_prompt_loss = pseudo_prompt_loss.squeeze().item()
+            candidate_losses.append(pseudo_prompt_loss)
+        return np.argmin(candidate_losses)
 
     def interface(self, image, task_id = None):
         image_features, _ = self.image_encoder(image, task_id=self.numtask-1 if task_id is None else task_id)
