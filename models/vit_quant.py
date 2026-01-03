@@ -420,7 +420,7 @@ class QuantViT(nn.Module):
         bef_feats = x0.detach()
         aft_feats = x[:, 1:, :]
         batch_size = x.size(0)
-        dist_feats = torch.cdist(aft_feats.view(batch_size, -1), bef_feats.view(batch_size, -1), p=2)
+        dist_feats = torch.cdist(aft_feats.reshape(batch_size, -1), bef_feats.reshape(batch_size, -1), p=2)
         mask = (labels.unsqueeze(0) == labels.unsqueeze(1))
         mask = (mask.float() * 2) - 1
         num_sim = (mask == 1).sum().item()
