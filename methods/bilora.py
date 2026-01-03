@@ -73,7 +73,7 @@ class BiLoRA(BaseLearner):
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
                                        num_workers=self.num_workers)
         test_dataset = data_manager.get_dataset(np.arange(0, self._total_classes), source='test', mode='test')
-        self.test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False,
+        self.test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False,
                                       num_workers=self.num_workers)
         print("[INFO] Created train dataloader and test dataloader")
         if train:
@@ -119,15 +119,14 @@ class BiLoRA(BaseLearner):
         return
 
     def train_function(self, train_loader, test_loader, optimizer, scheduler):
-        prog_bar = tqdm(range(self.run_epoch))
         self.cpe_weights = []
-        for _, epoch in enumerate(prog_bar):
+        for _, epoch in enumerate(range(self.run_epoch)):
             self._network.eval()
             losses = 0.
             correct, total = 0, 0
             self.cpe_weights.append(self._network.image_encoder.cpe.detach())
-            for i, (_, inputs, targets) in enumerate(train_loader):
-
+            for train_batch in tqdm(train_loader):
+                _, inputs, targets = train_batch
                 inputs, targets = inputs.to(self._device), targets.to(self._device)
                 mask = (targets >= self._known_classes).nonzero().view(-1)
                 inputs = torch.index_select(inputs, 0, mask)
@@ -149,14 +148,12 @@ class BiLoRA(BaseLearner):
                 _, preds = torch.max(logits, dim=1)
                 correct += preds.eq(targets.expand_as(preds)).cpu().sum()
                 total += len(targets)
-                if self.debug and i > 10: break
 
             scheduler.step()
             train_acc = np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
             info = 'Task {}, Epoch {}/{} => Loss {:.3f}, Train_accy {:.2f}'.format(
                 self._cur_task, epoch + 1, self.run_epoch, losses / len(train_loader), train_acc)
-            prog_bar.set_description(info)
 
         print(info)
 
@@ -234,5 +231,23 @@ class BiLoRA(BaseLearner):
 
         return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
-
-
+    
+    def eval_quant_task(self):
+        self._network.eval()
+        predictions = []
+        gts = []
+        with torch.no_grad():
+            for batch in tqdm(self.test_loader):
+                index, images, labels = batch
+                with torch.no_grad():
+                    images = images.to(self._device)
+                    outputs = self._network.test_quant(images)
+                    predictions.append(outputs)
+                    gts.append(labels)
+            gts = [g.item() for g in gts]
+            gts = torch.tensor(gts)
+            predictions = [int(p) for p in predictions]
+            predictions = torch.tensor(predictions)
+            num_corrections = torch.count_nonzero(predictions == gts)
+            acc = num_corrections / len(gts)
+            return acc

@@ -89,6 +89,9 @@ class BaseLearner(object):
 
         return cnn_accy, cnn_accy_with_task, nme_accy, cnn_accy_task
 
+    def eval_quant_task(self):
+        pass
+
     def incremental_train(self):
         pass
 
