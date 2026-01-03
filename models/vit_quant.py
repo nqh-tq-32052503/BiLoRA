@@ -417,7 +417,21 @@ class QuantViT(nn.Module):
             x = checkpoint_seq(self.blocks, x)
         for blk in self.blocks:
             x = blk(x, task_id=task_id, register_hook=False)
-        prompt_loss = F.mse_loss(x[:, 1:, :], x0)
+        bef_feats = x0.detach()
+        aft_feats = x[:, 1:, :]
+        dist_feats = torch.cdist(aft_feats, bef_feats, p=2)
+        mask = (labels.unsqueeze(0) == labels.unsqueeze(1))
+        mask = (mask.float() * 2) - 1
+        num_sim = (mask == 1).sum().item()
+        num_diff = (mask == -1).sum().item()
+        if int(num_sim) == 0:
+            prompt_loss = - torch.mean(dist_feats)
+        elif int(num_diff) == 0:
+            prompt_loss = torch.mean(dist_feats)
+        else:
+            avg_mask = torch.where(mask == 1, 1.0 / num_sim, -1.0 / num_diff)
+            avg_dist_matrix = torch.mul(dist_feats, avg_mask)
+            prompt_loss = avg_dist_matrix.sum()
         return x, prompt_loss
 
 
